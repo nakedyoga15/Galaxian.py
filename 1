@@ -1,0 +1,1556 @@
+import pygame
+import random
+import sys
+import pandas as pd
+import math
+from moviepy.editor import VideoFileClip
+import numpy as np
+from pygame.math import Vector2
+import os
+
+
+# Initialize pygame
+pygame.init()
+pygame.mixer.init()
+
+
+def start_game():
+    global game_state
+    game_state = GAME
+
+# Add this line to create the clock object
+clock = pygame.time.Clock()
+
+# Set screen dimensions
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+fade_in_time = 5000  # 5 секунд в миллисекундах
+fade_start_time = 0
+is_fading_in = False
+initial_volume = 0
+target_volume = 0.5  # Целевая громкость (измените по необходимости)
+mouse_button_held = False
+volume = 0.05
+current_wave = None
+wave_completed = False
+wave_number = 0
+
+# Set title of the window
+pygame.display.set_caption("2D Game")
+
+# Load and set custom cursor
+cursor_image = pygame.image.load("resurs/Object/kursor.png")
+cursor_image = pygame.transform.smoothscale(cursor_image, (32, 32))  # Adjust size as needed
+pygame.mouse.set_visible(False)  # Hide the default cursor
+
+# Загрузка иконок оружия
+gun_icon_1 = pygame.image.load("resurs/icon/gun_1.png")
+gun_icon_2 = pygame.image.load("resurs/icon/gun_2.png")
+machine_gun_icon_1 = pygame.image.load("resurs/icon/MachineGun_1.png")
+machine_gun_icon_2 = pygame.image.load("resurs/icon/MachineGun_2.png")
+attract_ball_icon_1 = pygame.image.load("resurs/icon/AttractBall_1.png")
+attract_ball_icon_2 = pygame.image.load("resurs/icon/AttractBall_2.png")
+
+# Масштабирование иконок до подходящего размера
+icon_size = (50, 50)
+gun_icon_1 = pygame.transform.smoothscale(gun_icon_1, icon_size)
+gun_icon_2 = pygame.transform.smoothscale(gun_icon_2, icon_size)
+machine_gun_icon_1 = pygame.transform.smoothscale(machine_gun_icon_1, icon_size)
+machine_gun_icon_2 = pygame.transform.smoothscale(machine_gun_icon_2, icon_size)
+attract_ball_icon_1 = pygame.transform.smoothscale(attract_ball_icon_1, icon_size)
+attract_ball_icon_2 = pygame.transform.smoothscale(attract_ball_icon_2, icon_size)
+
+# Load the battery pickup sound
+battery_pickup_sound = pygame.mixer.Sound("resurs/sound/sound_battery.mp3")
+
+# Load resources
+player_image = pygame.transform.smoothscale(pygame.image.load("resurs/Player/player_1.png"), (100, 120))
+background_image = pygame.transform.smoothscale(pygame.image.load("resurs/Lvl/backgraund_2.png"), (1920, 4096))
+#background_image = pygame.image.load("resurs/Lvl/backgraund_1.png")
+enemy_image = pygame.transform.smoothscale(pygame.image.load("resurs/Enemy/enemy_1.png"), (40, 40))
+enemy_2_image = pygame.transform.smoothscale(pygame.image.load("resurs/Enemy/enemy_2.png"), (50, 50))
+enemy_3_image = pygame.transform.smoothscale(pygame.image.load("resurs/Enemy/enemy_3.png"), (50, 50))
+boss_image = pygame.transform.smoothscale(pygame.image.load("resurs/Enemy/boss_1.png"), (100, 100))
+shoot_sound = pygame.mixer.Sound("resurs/sound/shoot_1.mp3")
+shoot_sound.set_volume(volume)
+boom_sound = pygame.mixer.Sound("resurs/sound/boom_1.mp3")
+boom_sound.set_volume(volume)
+hb_image = pygame.image.load("resurs/HB/HB.png")
+menu_background_image = pygame.image.load("resurs/menu/menu_background.png")
+
+# Загрузка музыки для меню
+menu_music = pygame.mixer.Sound("resurs/sound/sound_main_menu.mp3")
+
+# Load menu button images
+button_1_1 = pygame.image.load("resurs/menu/button_1_1.png")
+button_1_2 = pygame.image.load("resurs/menu/button_1_2.png")
+button_2_1 = pygame.image.load("resurs/menu/button_2_1.png")
+button_2_2 = pygame.image.load("resurs/menu/button_2_2.png")
+button_3_1 = pygame.image.load("resurs/menu/button_3_1.png")
+button_3_2 = pygame.image.load("resurs/menu/button_3_2.png")
+
+# Убедитесь, что размеры кнопок соответствуют размерам, указанным в menu_buttons
+menu_buttons = {
+    "new_game": pygame.Rect(SCREEN_WIDTH // 2 - 950, SCREEN_HEIGHT // 2 - 500, button_1_1.get_width(), button_1_1.get_height()),
+    "continue": pygame.Rect(SCREEN_WIDTH // 2 - 950, SCREEN_HEIGHT // 2 - 300, button_2_1.get_width(), button_2_1.get_height()),
+    "settings": pygame.Rect(SCREEN_WIDTH // 2 - 950, SCREEN_HEIGHT // 2 - 100, button_3_1.get_width(), button_3_1.get_height()),
+}
+
+# Load explosion effect images
+explosion_images = [pygame.image.load(f"resurs/effects/boom_1/boom_1_{i}.png") for i in range(23)]
+
+# Load shield animation images
+shield_images = [pygame.transform.smoothscale(pygame.image.load(f"resurs/effects/shields/shield_1_{i:04d}.png"), (200, 200)) for i in range(30)]
+
+# Load soundtrack
+pygame.mixer.music.load("resurs/sound/Main_sound.mp3")
+
+# Set initial volume level
+volume = 0.05
+
+# Load game data from Excel
+game_data = pd.read_excel('game_data.xlsx', sheet_name=None)
+player_data = game_data['Player']
+enemy_data = game_data['Enemy']
+# Загрузка данных о волнах из Excel файла
+wave_data = pd.read_excel('wave_config.xlsx')
+
+def set_volume():
+    global target_volume
+    target_volume = volume
+    if not is_fading_in:
+        pygame.mixer.music.set_volume(volume)
+    shoot_sound.set_volume(volume)
+    boom_sound.set_volume(volume)
+    menu_music.set_volume(volume)
+    battery_pickup_sound.set_volume(volume)
+
+set_volume()
+pygame.mixer.music.play(-1)
+
+# Game settings
+player_level = 1
+exp_max = 10 * player_level * 3
+exp = 0
+player_speed = 10
+player_pos = [SCREEN_WIDTH / 2, SCREEN_HEIGHT - player_image.get_height() - 20]
+weapon_data = game_data['Player Weapon']
+enemy_spawn_rate = 0.05
+enemy_list = []
+background_pos = [0.0, 0.0]
+background_pos_2 = [0.0, -background_image.get_height()]
+background_speed = 1
+score = 0
+font = pygame.font.Font(None, 52)
+level_font = pygame.font.Font("resurs/ttf/Orbitron.ttf", 100)
+GAME_FONT = pygame.freetype.Font("resurs/ttf/Orbitron.ttf", 18)
+bullet_list = []
+explosion_list = []
+battery_list = []
+debug_mode = False
+
+# Функция для создания оружия на основе данных из Excel
+def create_weapon(weapon_type):
+    weapon_row = weapon_data[weapon_data['Weapon'] == weapon_type].iloc[0]
+    damage = weapon_row['Damage']
+    bullet_speed = weapon_row['Bullet Speed']
+    bullet_radius = weapon_row['Bullet Radius']
+
+    if weapon_type == 'Gun':
+        return Gun(damage, bullet_speed, bullet_radius, (128, 128, 255))
+    elif weapon_type == 'MachineGun':
+        return MachineGun(damage, bullet_speed, bullet_radius, (255, 165, 0))
+    elif weapon_type == 'AttractBall':
+        return AttractBall(
+            start_pos=[0, 0],
+            color=(128, 0, 128),
+            speed=bullet_speed,
+            radius=bullet_radius,
+            damage=damage
+        )
+
+
+def spawn_enemy(enemy_type):
+    enemy_pos = [random.randint(0, SCREEN_WIDTH - enemy_image.get_width()), -enemy_image.get_height()]
+    if enemy_type == 'normal':
+        enemy = Enemy(enemy_image, enemy_pos, level=player_level)
+    elif enemy_type == 'fast':
+        enemy = FastEnemy(enemy_image, enemy_pos, level=player_level)
+    elif enemy_type == 'shooting':
+        enemy = ShootingEnemy(enemy_2_image, enemy_pos, level=player_level)
+    elif enemy_type == 'sinusoidal':
+        enemy = SinusoidalEnemy(enemy_3_image, enemy_pos, level=player_level)
+    elif enemy_type == 'boss':
+        enemy = Boss(boss_image, enemy_pos, level=player_level)
+    enemy_list.append(enemy)
+
+def create_next_wave():
+    global wave_number
+    wave_number += 1
+
+    # Получаем данные для текущей волны
+    wave_info = wave_data[wave_data['Wave'] == wave_number]
+
+    if wave_info.empty:
+        # Если данных для текущей волны нет, используем последнюю доступную волну
+        wave_info = wave_data.iloc[-1]
+    else:
+        # Если данные есть, берем первую (и единственную) строку
+        wave_info = wave_info.iloc[0]
+
+    # Теперь обращаемся к данным напрямую
+    enemy_count = int(wave_info['EnemyCount'])
+    enemy_types = str(wave_info['EnemyTypes']).split(',')
+    spawn_interval = int(wave_info['SpawnInterval'])
+    is_boss_wave = bool(wave_info['IsBossWave'])
+
+    if is_boss_wave:
+        return Wave(1, ['boss'], 0)
+    else:
+        return Wave(enemy_count, enemy_types, spawn_interval)
+    
+class Wave:
+    def __init__(self, enemy_count, enemy_types, spawn_interval):
+        self.enemy_count = enemy_count
+        self.enemy_types = enemy_types
+        self.spawn_interval = spawn_interval
+        self.enemies_spawned = 0
+        self.last_spawn_time = 0
+
+    def update(self, current_time):
+        if self.enemies_spawned < self.enemy_count and current_time - self.last_spawn_time > self.spawn_interval:
+            enemy_type = random.choice(self.enemy_types)
+            spawn_enemy(enemy_type)
+            self.enemies_spawned += 1
+            self.last_spawn_time = current_time
+
+    def is_complete(self):
+        return self.enemies_spawned >= self.enemy_count
+
+current_wave = Wave(10, ['normal', 'fast'], 1000)  # 10 enemies, two types, 1 second interval
+
+class Player:
+    def __init__(self, image, position, level, weapon_data):
+        self.original_image = image
+        self.image = image
+        self.rect = self.image.get_rect(center=player_pos)
+        self.position = position
+        self.hitbox = pygame.Rect(position[0], position[1], image.get_width(), image.get_height())
+        self.angle = 0
+        self.shield_active = False
+        self.shield_timer = 0
+        self.shield_frame = 0
+        self.shield_radius = 120
+        self.level = level
+        self.hp = player_data.loc[player_data['Level'] == level, 'HP'].values[0]
+        self.cp = player_data.loc[player_data['Level'] == level, 'CP'].values[0]
+        self.damage = player_data.loc[player_data['Level'] == level, 'Damage'].values[0]
+        self.weapon = self.set_weapon(weapon_data, level)
+        self.attract_ball = None
+        self.steam_images = [pygame.transform.smoothscale(pygame.image.load(f"resurs/effects/steam_1/steam_1 ({i}).png"), (200, 200)) for i in range(1, 64)]
+        self.fire_images = [pygame.transform.smoothscale(pygame.image.load(f"resurs/effects/fire_1/fire_1 ({i}).png"), (100, 100)) for i in range(1, 10)]
+        self.steam_frame = 63  # Start from the last frame
+        self.fire_frame = 0
+        self.steam_alpha = 70
+        self.fire_alpha = 180
+
+    def update_effects(self):
+        max_hp = player_data.loc[player_data['Level'] == self.level, 'HP'].values[0]
+        hp_percentage = self.hp / max_hp * 100
+
+        if hp_percentage <= 75:
+            self.steam_frame = (self.steam_frame - 1) % 63
+            self.steam_alpha = min(255, self.steam_alpha + 5)
+        else:
+            self.steam_alpha = max(0, self.steam_alpha - 5)
+
+        if hp_percentage <= 30:
+            self.fire_frame = (self.fire_frame + 1) % 9
+            self.fire_alpha = min(255, self.fire_alpha + 5)
+        else:
+            self.fire_alpha = max(0, self.fire_alpha - 5)
+
+    def check_bullet_shield_collision(self, bullet_pos):
+            if self.shield_active:
+                shield_center = (self.position[0] + self.hitbox.width // 2, self.position[1] + self.hitbox.height // 2)
+                dx = bullet_pos[0] - shield_center[0]
+                dy = bullet_pos[1] - shield_center[1]
+                distance = math.sqrt(dx**2 + dy**2)
+                return distance <= self.shield_radius
+            return False
+
+    def set_weapon(self, weapon_data, level):
+        weapons = []
+        for index, row in weapon_data.iterrows():
+            if row['Weapon'] == 'Gun':
+                weapons.append(Gun(row['Damage'], row['Bullet Speed'], row['Bullet Radius'], (255, 0, 0)))
+            elif row['Weapon'] == 'MachineGun':
+                weapons.append(MachineGun(row['Damage'], row['Bullet Speed'], row['Bullet Radius'], (255, 165, 0)))
+            elif row['Weapon'] == 'AttractBall':
+                weapons.append(AttractBall(
+                    start_pos=self.position,
+                    color=(128, 0, 128),
+                    speed=row['Bullet Speed'],
+                    radius=row['Bullet Radius'],
+                    damage=row['Damage']
+                ))
+        return weapons
+
+    def update(self):
+        self.hitbox.x = self.position[0]
+        self.hitbox.y = self.position[1]
+        if self.shield_active:
+            self.shield_timer += 1
+            if self.shield_timer % 2 == 0:
+                self.shield_frame = (self.shield_frame + 1) % len(shield_images)
+            if self.shield_timer > 60:
+                self.shield_timer = 0
+        if self.attract_ball:
+            self.attract_ball.update()
+        mouse_pos = pygame.mouse.get_pos()
+        self.rotate_towards(mouse_pos)
+
+    def weapon_has_ammo(self):
+        if isinstance(self.weapon, Gun):
+            return True  # У Gun всегда есть патроны
+        elif isinstance(self.weapon, MachineGun):
+            return self.weapon.ammo > 0
+        elif isinstance(self.weapon, AttractBall):
+            return self.weapon.ammo > 0 and (self.attract_ball is None or not self.attract_ball.active)
+        return False
+
+    def change_weapon(self, weapon_index):
+        if 0 <= weapon_index < len(available_weapons):
+            self.weapon = available_weapons[weapon_index]
+
+    def rotate_towards(self, target_pos):
+        dx = target_pos[0] - (self.position[0] + self.hitbox.width / 2)
+        dy = target_pos[1] - (self.position[1] + self.hitbox.height / 2)
+        self.angle = math.degrees(math.atan2(-dy, dx)) - 90
+        self.image = pygame.transform.rotate(self.original_image, self.angle)
+        self.rect = self.image.get_rect(center=self.hitbox.center)
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect.topleft)
+
+        if self.fire_alpha > 0:
+            fire_frame = min(self.fire_frame, len(self.fire_images) - 1)
+            fire_image = self.fire_images[fire_frame]
+            fire_image.set_alpha(self.fire_alpha)
+            screen.blit(fire_image, (self.position[0] - 0, self.position[1] - 0))
+        
+        if self.steam_alpha > 0:
+            steam_frame = min(self.steam_frame, len(self.steam_images) - 1)
+            steam_image = self.steam_images[steam_frame]
+            steam_image.set_alpha(self.steam_alpha)
+            screen.blit(steam_image, (self.position[0] - 60, self.position[1] - 40))
+
+        if self.shield_active:
+            shield_image = shield_images[self.shield_frame]
+            shield_image = pygame.transform.scale(shield_image, (self.shield_radius * 2, self.shield_radius * 2))
+            shield_rect = shield_image.get_rect(center=(self.position[0] + self.hitbox.width // 2, self.position[1] + self.hitbox.height // 2))
+            screen.blit(shield_image, shield_rect)
+
+        if debug_mode:
+            pygame.draw.rect(screen, (255, 0, 0), self.hitbox, 2)
+            if self.shield_active:
+                pygame.draw.circle(screen, (0, 255, 0), (self.position[0] + self.hitbox.width // 2, self.position[1] + self.hitbox.height // 2), self.shield_radius, 2)
+
+        if self.attract_ball:
+            self.attract_ball.draw(screen)
+
+    def set_shield_active(self, active):
+        self.shield_active = active
+        if not active:
+            self.shield_timer = 0
+            self.shield_frame = 0
+
+    def set_hitbox_size(self, width, height):
+        self.hitbox.width = width
+        self.hitbox.height = height
+
+    def set_shield_radius(self, radius):
+        self.shield_radius = radius
+
+    def set_shield_size(self, size):
+        self.shield_radius = size // 2
+
+    def shoot(self):
+        bullet_pos = [self.position[0] + self.image.get_width() / 2, self.position[1] + self.image.get_height() / 2]
+        mouse_pos = pygame.mouse.get_pos()
+
+        if isinstance(self.weapon, Gun):
+            bullet_angle = self.angle + 90
+            bullet_list.append({'pos': bullet_pos, 'angle': bullet_angle, 'weapon': self.weapon})
+            shoot_sound.set_volume(volume)
+            shoot_sound.play()
+        elif isinstance(self.weapon, MachineGun):
+            bullet_angle = self.angle + 90
+            self.weapon.shoot(self.position, bullet_angle)
+        elif isinstance(self.weapon, AttractBall):
+            if self.weapon.ammo > 0 and (not self.attract_ball or not self.attract_ball.active):
+                self.attract_ball = AttractBall(
+                    start_pos=bullet_pos,
+                    color=self.weapon.color,
+                    speed=self.weapon.speed,
+                    radius=self.weapon.radius,
+                    damage=self.weapon.damage
+                )
+                self.attract_ball.shoot(bullet_pos, mouse_pos)
+                shoot_sound.set_volume(volume)
+                shoot_sound.play()
+                self.weapon.ammo -= 1
+
+    def weapon_has_ammo(self):
+        if isinstance(self.weapon, Gun):
+            return True  # У Gun всегда есть патроны
+        elif isinstance(self.weapon, (MachineGun, AttractBall)):
+            return self.weapon.ammo > 0
+        return False
+
+    def set_weapon(self, weapon_data, level):
+        for index, row in weapon_data.iterrows():
+            if row['Weapon'] == 'Gun':
+                return Gun(row['Damage'], row['Bullet Speed'], row['Bullet Radius'], (255, 0, 0))
+            elif row['Weapon'] == 'MachineGun':
+                return MachineGun(row['Damage'], row['Bullet Speed'], row['Bullet Radius'], (255, 165, 0))
+            elif row['Weapon'] == 'AttractBall':
+                return AttractBall(
+                    start_pos=self.position,
+                    color=(128, 0, 128),
+                    speed=row['Bullet Speed'],
+                    radius=row['Bullet Radius'],
+                    damage=row['Damage']
+                )
+        return create_weapon('Gun')  # если нет ни одного оружия, возвращаем Gun
+
+class Enemy:
+    id_counter = 0
+
+    def __init__(self, image, position, level):
+        self.original_image = image
+        self.image = image
+        self.position = position
+        self.hitbox = pygame.Rect(position[0], position[1], image.get_width(), image.get_height())
+        self.id = Enemy.id_counter
+        Enemy.id_counter += 1
+        self.level = level
+        if enemy_data.loc[enemy_data['Level'] == level].empty:
+            raise ValueError(f"No enemy data found for level {level}")
+        self.hp = enemy_data.loc[enemy_data['Level'] == level, 'HP'].values[0]
+        self.damage = enemy_data.loc[enemy_data['Level'] == level, 'Damage'].values[0]
+        self.speed = enemy_data.loc[enemy_data['Level'] == level, 'Movement Speed'].values[0]
+        self.angle = 0
+
+    def update(self, player_pos):
+        # Вычисляем вектор направления к игроку
+        dx = player_pos[0] - self.position[0]
+        dy = player_pos[1] - self.position[1]
+        distance = math.sqrt(dx**2 + dy**2)
+
+        # Нормализуем вектор
+        if distance > 0:
+            dx /= distance
+            dy /= distance
+
+        # Обновляем позицию врага
+        self.position[0] += dx * self.speed
+        self.position[1] += dy * self.speed
+
+        # Обновляем hitbox
+        self.hitbox.x = self.position[0]
+        self.hitbox.y = self.position[1]
+
+        # Вычисляем угол поворота
+        self.angle = math.degrees(math.atan2(-dy, dx))
+
+        # Поворачиваем изображение
+        self.image = pygame.transform.rotate(self.original_image, self.angle)
+
+    def draw_hp_bar(self, screen):
+        bar_width = 40
+        bar_height = 5
+        bar_pos = (self.position[0] + self.image.get_width() // 2 - bar_width // 2,
+                   self.position[1] - 10)
+
+        # Draw background (red bar)
+        pygame.draw.rect(screen, (255, 0, 0), (*bar_pos, bar_width, bar_height))
+
+        # Draw HP (green bar)
+        hp_width = int((self.hp / enemy_data.loc[enemy_data['Level'] == self.level, 'HP'].values[0]) * bar_width)
+        pygame.draw.rect(screen, (0, 255, 0), (*bar_pos, hp_width, bar_height))
+
+    def draw(self, screen):
+        # Отрисовываем повернутое изображение
+        rect = self.image.get_rect(center=(self.position[0] + self.hitbox.width / 2,
+                                           self.position[1] + self.hitbox.height / 2))
+        screen.blit(self.image, rect.topleft)
+        if debug_mode:
+            pygame.draw.rect(screen, (255, 0, 0), self.hitbox, 2)
+
+        # Draw HP bar
+        self.draw_hp_bar(screen)
+
+    def set_hitbox_size(self, width, height):
+        self.hitbox.width = width
+        self.hitbox.height = height
+
+    def check_shield_collision(self, shield_pos, shield_radius):
+        dx = shield_pos[0] - self.position[0]
+        dy = shield_pos[1] - self.position[1]
+        dist = (dx**2 + dy**2)**0.5
+        if dist <= shield_radius + self.image.get_width() / 2:
+            return True
+        return False
+
+class FastEnemy(Enemy):
+    def __init__(self, image, position, level):
+        super().__init__(image, position, level)
+        self.speed *= 1.5
+
+    def update(self, player_pos):
+        super().update(player_pos)
+
+    def draw(self, screen):
+        super().draw(screen)
+        self.draw_hp_bar(screen)
+
+class ShootingEnemy(Enemy):
+    def __init__(self, image, position, level):
+        super().__init__(image, position, level)
+        self.speed *= 0.75 * (player_level / 2)
+        self.shoot_interval = 2000 / (player_level / 2)
+        self.last_shot_time = 0
+        self.bullet_speed = 5  # Скорость пули
+
+    def update(self, current_time, player_pos):
+        super().update(player_pos)
+        if current_time - self.last_shot_time > self.shoot_interval:
+            self.shoot()
+            self.last_shot_time = current_time
+
+    def shoot(self):
+        # Вычисляем направление выстрела
+        angle_rad = math.radians(self.angle)
+        dx = math.cos(angle_rad)
+        dy = -math.sin(angle_rad)  # Инвертируем, так как ось Y направлена вниз
+
+        # Создаем пулю в позиции врага
+        bullet_pos = [self.position[0] + self.image.get_width() / 2,
+                      self.position[1] + self.image.get_height() / 2]
+
+        # Добавляем пулю в список вражеских пуль
+        enemy_bullet_list.append({
+            'pos': bullet_pos,
+            'angle': math.degrees(angle_rad)
+        })
+
+    def draw(self, screen):
+        super().draw(screen)
+        self.draw_hp_bar(screen)
+
+class SinusoidalEnemy(Enemy):
+    def __init__(self, image, position, level):
+        super().__init__(image, position, level)
+        self.speed *= 0.5
+        self.amplitude = 100
+        self.frequency = 0.05
+        self.time = 0
+        self.initial_x = position[0]
+
+    def update(self, player_pos):
+        self.time += 0.1
+        self.position[0] = self.initial_x + math.sin(self.time * self.frequency) * self.amplitude
+        self.position[1] += self.speed
+        self.hitbox.x = self.position[0]
+        self.hitbox.y = self.position[1]
+
+        # Вычисляем угол поворота
+        dx = player_pos[0] - self.position[0]
+        dy = player_pos[1] - self.position[1]
+        self.angle = math.degrees(math.atan2(-dy, dx))
+
+        # Поворачиваем изображение
+        self.image = pygame.transform.rotate(self.original_image, self.angle)
+
+    def draw(self, screen):
+        super().draw(screen)
+        self.draw_hp_bar(screen)
+
+class Boss(Enemy):
+    def __init__(self, image, position, level):
+        super().__init__(image, position, level)
+        self.speed *= 0.25
+        self.shoot_interval = 1000
+        self.last_shot_time = 0
+
+    def update(self, current_time, player_pos):
+        super().update(player_pos)
+        if current_time - self.last_shot_time > self.shoot_interval:
+            self.shoot()
+            self.last_shot_time = current_time
+
+    def shoot(self):
+        for i in range(10):
+            angle = -90 + (i - 1) * 30  # Стреляем под углами 60, 90 и 120 градусов
+            bullet_pos = [self.position[0] + self.image.get_width() / 2, self.position[1] + self.image.get_height() / 2]
+            enemy_bullet_list.append({
+                'pos': bullet_pos,
+                'angle': angle
+            })
+
+    def draw(self, screen):
+        super().draw(screen)
+        self.draw_hp_bar(screen)
+
+class Battery:
+    def __init__(self, position, velocity=[0, 0]):
+        self.animation_images = []
+        scale_factor = 0.15
+        for i in range(10):
+            image = pygame.image.load(f"resurs/Object/battery_animation_{i}.png")
+            width = int(image.get_width() * scale_factor)
+            height = int(image.get_height() * scale_factor)
+            image = pygame.transform.smoothscale(image, (width, height))
+            self.animation_images.append(image)
+        self.image = self.animation_images[0]
+        self.position = list(position)  # Преобразуем в список, чтобы можно было изменять
+        self.hitbox = pygame.Rect(position[0], position[1], self.image.get_width(), self.image.get_height())
+        self.animation_frame = 0
+        self.animation_timer = 0
+        self.velocity = velocity
+
+    def update(self):
+        # Update position based on velocity
+        self.position[0] += self.velocity[0]
+        self.position[1] += self.velocity[1]
+        
+        # Update hitbox
+        self.hitbox.x = self.position[0]
+        self.hitbox.y = self.position[1]
+
+        # Animation update (existing code)
+        self.animation_timer += 1
+        if self.animation_timer % 3 == 0:
+            self.animation_frame = (self.animation_frame + 1) % len(self.animation_images)
+            self.image = self.animation_images[self.animation_frame]
+
+    def is_off_screen(self):
+        return (self.position[0] < -self.image.get_width() or
+                self.position[0] > SCREEN_WIDTH or
+                self.position[1] < -self.image.get_height() or
+                self.position[1] > SCREEN_HEIGHT)
+
+
+    def draw(self, screen):
+        screen.blit(self.image, self.position)
+
+class Explosion:
+    def __init__(self, position):
+        self.animation_images = explosion_images
+        self.image = self.animation_images[0]
+        self.position = position
+        self.animation_frame = 0
+        self.animation_timer = 0
+
+    def update(self):
+        self.animation_timer += 1
+        if self.animation_timer % 2 == 0:
+            self.animation_frame = (self.animation_frame + 1) % len(self.animation_images)
+            self.image = self.animation_images[self.animation_frame]
+        if self.animation_frame == len(self.animation_images) - 1:
+            explosion_list.remove(self)
+
+    def draw(self, screen):
+        screen.blit(self.image, self.position)
+
+class Gun:
+    def __init__(self, damage, bullet_speed, bullet_radius, bullet_color):
+        self.damage = damage
+        self.bullet_speed = bullet_speed
+        self.bullet_radius = bullet_radius
+        self.bullet_color = bullet_color
+        self.ammo = float('inf')  # бесконечные патроны
+        self.bullet_color_glow = (200, 150, 200)  # светлый берюзовый цвет для свечения
+
+class MachineGun:
+    def __init__(self, damage, bullet_speed, bullet_radius, bullet_color):
+        self.damage = damage
+        self.bullet_speed = bullet_speed
+        self.bullet_radius = bullet_radius
+        self.bullet_color = bullet_color
+        self.max_ammo = 1000
+        self.ammo = 100  # начальное количество патронов
+        self.bullet_color_glow = (200, 150, 200)
+        self.last_shot_time = 0
+        self.fire_rate = 100  # Миллисекунды между выстрелами
+
+    def shoot(self, player_pos, angle):
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_shot_time > self.fire_rate and self.ammo > 0:
+            bullet_pos = [player_pos[0] + player.image.get_width() / 2, player_pos[1] + player.image.get_height() / 2]
+            bullet_list.append({'pos': bullet_pos, 'angle': angle, 'weapon': self})
+            shoot_sound.set_volume(volume)
+            shoot_sound.play()
+            self.ammo -= 1
+            self.last_shot_time = current_time
+
+    def update_bullets(self, bullet_list, enemy_list):
+        global exp  # Объявляем переменную exp как глобальную
+        for bullet in bullet_list.copy():
+            if bullet['weapon'] == self:
+                bullet['pos'][0] += math.cos(math.radians(bullet['angle'])) * self.bullet_speed
+                bullet['pos'][1] -= math.sin(math.radians(bullet['angle'])) * self.bullet_speed
+
+                if (bullet['pos'][0] < 0 or bullet['pos'][0] > SCREEN_WIDTH or
+                    bullet['pos'][1] < 0 or bullet['pos'][1] > SCREEN_HEIGHT):
+                    bullet_list.remove(bullet)
+
+                for enemy in enemy_list.copy():
+                    if enemy.hitbox.collidepoint(bullet['pos'][0], bullet['pos'][1]):
+                        enemy.hp -= player.damage * player.weapon.damage
+                        if enemy.hp <= 0:
+                            boom_sound.play()
+                            explosion = Explosion(enemy.position)
+                            explosion_list.append(explosion)
+                            enemy_list.remove(enemy)
+                            if random.random() < 0.05:
+                                enemy_velocity = [enemy.speed * math.cos(math.radians(enemy.angle)),
+                                                  enemy.speed * math.sin(math.radians(enemy.angle))]
+                                battery = Battery(enemy.position.copy(), enemy_velocity)
+                                battery_list.append(battery)
+                            exp += 2 * player_level
+                        if bullet in bullet_list:
+                            bullet_list.remove(bullet)
+
+                        # Отталкивание врага
+                        angle_rad = math.atan2(bullet['pos'][1] - enemy.position[1], bullet['pos'][0] - enemy.position[0])
+                        enemy.position[0] += math.cos(angle_rad)
+                        enemy.position[1] += math.sin(angle_rad)
+
+                        break
+
+class AttractBall:
+    distortion_texture = None  # Статическая переменная для хранения текстуры
+
+    def __init__(self, start_pos, color, speed, radius, damage):
+        self.position = list(start_pos)
+        self.color = color
+        self.speed = speed
+        self.radius = radius
+        self.damage = damage
+        self.active = False
+        self.attract_strength = 10
+        self.bullet_speed = speed
+        self.max_ammo = 10
+        self.ammo = 1  # начальное количество патронов
+        self.animation_images = [
+        pygame.transform.smoothscale(pygame.image.load(f"resurs/Object/blackhole/blackhole_0 ({i}).png"), (100, 100))
+        for i in range(1, 91)
+    ]
+        self.animation_frame = 0
+        self.animation_timer = 0
+        self.target_pos = None
+
+        # Создаем текстуру искажения только один раз для всех экземпляров
+        if AttractBall.distortion_texture is None:
+            AttractBall.distortion_texture = self.create_distortion_texture()
+
+    @staticmethod
+    def create_distortion_texture():
+        size = 100  # Фиксированный размер текстуры
+        texture = pygame.Surface((size, size), pygame.SRCALPHA)
+        center = size // 2
+        max_offset = size // 8
+
+        # Используем numpy для быстрых вычислений
+        x, y = np.meshgrid(np.arange(size), np.arange(size))
+        dx = x - center
+        dy = y - center
+        distances = np.sqrt(dx**2 + dy**2)
+        max_distance = size // 2
+
+        mask = distances < max_distance
+        offsets = np.where(mask, max_offset * (1 - distances / max_distance), 0)
+        angles = np.arctan2(dy, dx)
+
+        new_x = x + np.cos(angles) * offsets
+        new_y = y + np.sin(angles) * offsets
+
+        new_x = np.clip(new_x, 0, size - 1).astype(int)
+        new_y = np.clip(new_y, 0, size - 1).astype(int)
+
+        # Создаем градиент прозрачности
+        alphas = np.where(mask, 255 * (1 - distances / max_distance), 0).astype(np.uint8)
+
+        # Применяем искажение и прозрачность
+        texture_array = pygame.surfarray.pixels_alpha(texture)
+        texture_array[:] = alphas
+
+        return texture
+
+    def update(self):
+        if self.active:
+            if self.target_pos:
+                dx = self.target_pos[0] - self.position[0]
+                dy = self.target_pos[1] - self.position[1]
+                distance = math.sqrt(dx**2 + dy**2)
+                
+                if distance > 0:
+                    dx /= distance
+                    dy /= distance
+                    
+                    self.position[0] += dx * self.speed
+                    self.position[1] += dy * self.speed
+                
+                if distance < self.speed:
+                    self.active = False
+
+            self.animation_timer += 1
+            if self.animation_timer % 2 == 0:
+                self.animation_frame = (self.animation_frame + 1) % len(self.animation_images)
+
+    def shoot(self, start_pos, target_pos):
+        self.position = list(start_pos)
+        self.target_pos = target_pos
+        self.active = True
+
+    def attract_enemies(self, enemies):
+        for enemy in enemies:
+            dx = self.position[0] - enemy.position[0]
+            dy = self.position[1] - enemy.position[1]
+            distance = math.sqrt(dx**2 + dy**2)
+            if distance < self.radius * 15:
+                angle = math.atan2(dy, dx)
+                enemy.position[0] += math.cos(angle) * self.attract_strength
+                enemy.position[1] += math.sin(angle) * self.attract_strength
+
+    def draw(self, screen):
+        if self.active:
+            # Отрисовка эффекта искажения
+            scale = self.radius * 15 / AttractBall.distortion_texture.get_width()
+            scaled_texture = pygame.transform.scale(AttractBall.distortion_texture, 
+                                                    (int(AttractBall.distortion_texture.get_width() * scale),
+                                                     int(AttractBall.distortion_texture.get_height() * scale)))
+            pos = (int(self.position[0] - scaled_texture.get_width() // 2),
+                   int(self.position[1] - scaled_texture.get_height() // 2))
+            screen.blit(scaled_texture, pos, special_flags=pygame.BLEND_ALPHA_SDL2)
+
+            # Отрисовка анимации черной дыры
+            image = self.animation_images[self.animation_frame]
+            screen.blit(image, (int(self.position[0] - image.get_width() // 2),
+                                int(self.position[1] - image.get_height() // 2)))
+
+
+# Game states
+MENU = "menu"
+SETTINGS = "settings"
+GAME = "game"
+INTRO = "intro"
+game_state = MENU
+
+# Menu buttons
+menu_buttons = {
+    "new_game": pygame.Rect(SCREEN_WIDTH // 2 - 950, SCREEN_HEIGHT // 2 - 500, 400, 193),
+    "continue": pygame.Rect(SCREEN_WIDTH // 2 - 950, SCREEN_HEIGHT // 2 - 300, 399, 189),
+    "settings": pygame.Rect(SCREEN_WIDTH // 2 - 950, SCREEN_HEIGHT // 2 - 100, 388, 155),
+}
+
+# Settings buttons
+settings_buttons = {
+    "ok": pygame.Rect(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 + 100, 100, 50),
+    "volume_up": pygame.Rect(SCREEN_WIDTH // 2 + 100, SCREEN_HEIGHT // 2 - 50, 50, 50),
+    "volume_down": pygame.Rect(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50, 50, 50),
+}
+
+# Intro buttons
+intro_buttons = {
+    "watch": pygame.Rect(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50, 300, 50),
+    "skip": pygame.Rect(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, 300, 50),
+}
+
+def draw_text(screen, text, font, color, x, y):
+    text_surface = font.render(text, True, color)
+    text_rect = text_surface.get_rect(topleft=(x, y))
+    screen.blit(text_surface, text_rect)
+
+def draw_button(screen, text, font, color, background_color, x, y, width, height):
+    pygame.draw.rect(screen, background_color, (x, y, width, height))
+    pygame.draw.rect(screen, (0, 0, 0), (x, y, width, height), 2)
+    draw_text(screen, text, font, color, x + 10, y + 10)
+
+def play_intro_video():
+    current_volume = pygame.mixer.music.get_volume()
+    pygame.mixer.music.stop()
+    clip = VideoFileClip("resurs/video/intro.mp4")
+    clip = clip.volumex(current_volume * 1.7)
+    clip.preview()
+    pygame.mixer.music.load("resurs/sound/Main_sound.mp3")
+    pygame.mixer.music.play(-1)
+    pygame.mixer.music.set_volume(current_volume)
+
+# New variables
+enemy_bullet_list = []
+boss_interval = 5  # Boss appears every 5 waves
+available_weapons = [
+    create_weapon('Gun'),
+    create_weapon('MachineGun'),
+    create_weapon('AttractBall')
+]
+
+def draw_weapon_icons(screen, player):
+    icon_spacing = 60
+    icon_y = 110
+    outline_thickness = 4
+
+    for i, weapon in enumerate(available_weapons):
+        icon_x = SCREEN_WIDTH - (len(available_weapons) - i) * icon_spacing - 1585
+
+        if isinstance(weapon, MachineGun):
+            icon = machine_gun_icon_1 if weapon.ammo > 0 else machine_gun_icon_2
+        elif isinstance(weapon, Gun):
+            icon = gun_icon_1
+        elif isinstance(weapon, AttractBall):
+            icon = attract_ball_icon_1 if weapon.ammo > 0 else attract_ball_icon_2
+
+        screen.blit(icon, (icon_x, icon_y))
+
+        if type(player.weapon) == type(weapon):
+            pygame.draw.rect(screen, (255, 255, 255),
+                             (icon_x - outline_thickness,
+                              icon_y - outline_thickness,
+                              icon_size[0] + outline_thickness * 2,
+                              icon_size[1] + outline_thickness * 2),
+                             outline_thickness)
+
+def handle_player_death():
+    global game_state, player, enemy_list, bullet_list, explosion_list, battery_list, exp, wave_number
+
+    game_state = MENU
+    
+    # Reset game state
+    player = Player(player_image, player_pos, player_level, weapon_data)
+    new_enemy_list = [enemy for enemy in enemy_list if enemy in enemy_list]
+    enemy_list = new_enemy_list
+    bullet_list = []
+    explosion_list = []
+    battery_list = []
+    exp = 0
+    
+
+def cap_scens():
+    # Импорты и настройка экрана остаются без изменений
+
+    # Загрузка ресурсов
+    sound = pygame.mixer.Sound(os.path.join("resurs", "sound", "cap_1.mp3"))
+    sound.set_volume(0.01)  # Set volume to 50%
+    background = pygame.image.load(os.path.join("resurs", "Lvl", "backgraund_2.png")).convert()
+    final_boss = pygame.image.load(os.path.join("resurs", "Enemy", "final_boss.png")).convert_alpha()
+    dialogs = [
+        pygame.image.load(os.path.join("resurs", "video", f"dialog_{i}.png")).convert_alpha()
+        for i in range(1, 4)
+    ]
+
+    # Загрузка кадров анимации огня
+    fire_frames = [
+        pygame.image.load(os.path.join("resurs", "video", "react_fire", f"react_fire_1 ({i}).png")).convert_alpha()
+        for i in range(1, 76)
+    ]
+
+    # Переворачиваем кадры на 180 градусов
+    fire_frames = [pygame.transform.rotate(frame, 180) for frame in fire_frames]
+
+    # Настройки времени для каждой сцены (в секундах)
+    timing = {
+        "boss_appear": 10,
+        "fade_to_black_1": 0,
+        "dialog_interval": 7,
+        "fade_to_black_2": 0,
+        "fade_from_black": 0,
+        "boss_disappear": 8
+    }
+
+    # Вычисление общей продолжительности кат-сцены
+    total_duration = (timing["boss_appear"] + timing["fade_to_black_1"] +
+                      timing["dialog_interval"] * 3 + timing["fade_to_black_2"] +
+                      timing["fade_from_black"] + timing["boss_disappear"])
+
+    # Настройки смещения огня относительно босса
+    fire_offset_y = 350  # Расстояние от центра босса до центра огня
+
+    # Остальные функции (fade_to_black, fade_from_black) остаются без изменений
+
+    # Параметры дребезжания
+    shake_intensity = 1
+    shake_duration = 0.1
+
+    # Настройки текста
+    font = pygame.font.Font(None, 42)  # Используйте свой шрифт, если нужно
+    text_color = (255, 255, 255)  # Белый цвет
+    text_speed = 0.25  # Скорость появления букв (в секундах)
+    line_spacing = 40  # Расстояние между строками
+
+    # Тексты диалогов (каждый диалог - список строк)
+    dialog_texts = [
+        ["Мой ПОВЕЛИТЕЛЬ, этот мальчишка", "преследует нас, какова", "будет ваша воля О ПОВЕЛИТЕЛЬ?"],
+        ["     Эх глупец...", "Отправьте жнецов тьмы.", "Пусть они нападут когда я,", "буду в 1000 парсеков от него."],
+        ["       Да, мой ПОВЕЛИТЕЛЬ!!!", "Я отправлю за ним лучших бойцов."]
+    ]
+
+    # Позиция начала текста (настройте по вашему усмотрению)
+    text_start_positions = [
+        (1200, SCREEN_HEIGHT - 770),  # Позиция для первого диалога
+        (200, SCREEN_HEIGHT - 920),  # Позиция для второго диалога
+        (1200, SCREEN_HEIGHT - 760)   # Позиция для третьего диалога
+    ]
+
+    def shake_offset(intensity):
+        return random.randint(-intensity, intensity), random.randint(-intensity, intensity)
+
+    def render_text(surface, text_lines, start_position, progress):
+        current_line = 0
+        total_chars = 0
+        for line in text_lines:
+            total_chars += len(line)
+            if progress > total_chars:
+                # Эта строка полностью отображена
+                rendered_text = font.render(line, True, text_color)
+                surface.blit(rendered_text, (start_position[0], start_position[1] + current_line * line_spacing))
+                current_line += 1
+            else:
+                # Эта строка в процессе отображения
+                chars_to_render = progress - (total_chars - len(line))
+                rendered_text = font.render(line[:int(chars_to_render)], True, text_color)
+                surface.blit(rendered_text, (start_position[0], start_position[1] + current_line * line_spacing))
+                break
+
+    def run_cutscene():
+        clock = pygame.time.Clock()
+        sound.play(-1)
+
+        bg_y = 0
+        boss_pos = Vector2(SCREEN_WIDTH/2, SCREEN_HEIGHT + final_boss.get_height()/2)
+        start_time = pygame.time.get_ticks()
+        fire_frame_index = 0
+
+        shake_start_time = 0
+        is_shaking = False
+        shake_x, shake_y = 0, 0
+
+        text_progress = [0, 0, 0]
+        current_dialog = 0
+
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            current_time = pygame.time.get_ticks()
+            elapsed_time = (current_time - start_time) / 1000
+
+            render_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+            bg_y = (bg_y + 1) % background.get_height()
+            render_surface.blit(background, (0, bg_y - background.get_height()))
+            render_surface.blit(background, (0, bg_y))
+
+            if elapsed_time < timing["boss_appear"]:
+                if not is_shaking:
+                    is_shaking = True
+                    shake_start_time = current_time
+
+                t = elapsed_time / timing["boss_appear"]
+                boss_pos.y = SCREEN_HEIGHT + final_boss.get_height()/2 - t * (SCREEN_HEIGHT/2 + final_boss.get_height()/2)
+                render_surface.blit(final_boss, final_boss.get_rect(center=boss_pos))
+                
+                fire_frame = fire_frames[fire_frame_index]
+                fire_pos = Vector2(boss_pos.x, boss_pos.y + fire_offset_y)
+                fire_rect = fire_frame.get_rect(center=fire_pos)
+                render_surface.blit(fire_frame, fire_rect)
+                fire_frame_index = (fire_frame_index + 1) % len(fire_frames)
+
+            elif elapsed_time < timing["boss_appear"] + timing["fade_to_black_1"] + timing["dialog_interval"] * 3:
+                dialog_time = elapsed_time - (timing["boss_appear"] + timing["fade_to_black_1"])
+                dialog_index = int(dialog_time // timing["dialog_interval"])
+                render_surface.blit(dialogs[dialog_index], dialogs[dialog_index].get_rect(center=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2)))
+                
+                # Отображение текстов диалогов
+                for i in range(dialog_index + 1):
+                    if i == dialog_index:
+                        text_progress[i] += text_speed
+                    total_chars = sum(len(line) for line in dialog_texts[i])
+                    text_progress[i] = min(text_progress[i], total_chars)
+                    
+                    # Отображаем текущий диалог и второй диалог (если он уже появился)
+                    if i == dialog_index or i == 1:
+                        render_text(render_surface, dialog_texts[i], text_start_positions[i], text_progress[i])
+                        
+            elif elapsed_time < timing["boss_appear"] + timing["fade_to_black_1"] + timing["dialog_interval"] * 3 + timing["fade_to_black_2"]:
+                fade_to_black(timing["fade_to_black_2"])
+            elif elapsed_time < total_duration - timing["boss_disappear"]:
+                fade_from_black(timing["fade_from_black"], final_boss)
+            elif elapsed_time < total_duration:
+                if not is_shaking:
+                    is_shaking = True
+                    shake_start_time = current_time
+
+                t = (elapsed_time - (total_duration - timing["boss_disappear"])) / timing["boss_disappear"]
+                boss_pos.y = SCREEN_HEIGHT/2 - t * (SCREEN_HEIGHT + final_boss.get_height()/2)
+                render_surface.blit(final_boss, final_boss.get_rect(center=boss_pos))
+                
+                fire_frame = fire_frames[fire_frame_index]
+                fire_pos = Vector2(boss_pos.x, boss_pos.y + fire_offset_y)
+                fire_rect = fire_frame.get_rect(center=fire_pos)
+                render_surface.blit(fire_frame, fire_rect)
+                fire_frame_index = (fire_frame_index + 1) % len(fire_frames)
+
+            else:
+                sound.stop()
+                running = False
+
+            if is_shaking and current_time - shake_start_time < shake_duration * 1000:
+                shake_x, shake_y = shake_offset(shake_intensity)
+            else:
+                is_shaking = False
+                shake_x, shake_y = 0, 0
+
+            screen.blit(render_surface, (shake_x, shake_y))
+
+            if shake_x > 0:
+                pygame.draw.rect(screen, (0, 0, 0), (0, 0, shake_x, SCREEN_HEIGHT))
+            elif shake_x < 0:
+                pygame.draw.rect(screen, (0, 0, 0), (SCREEN_WIDTH + shake_x, 0, -shake_x, SCREEN_HEIGHT))
+            if shake_y > 0:
+                pygame.draw.rect(screen, (0, 0, 0), (0, 0, SCREEN_WIDTH, shake_y))
+            elif shake_y < 0:
+                pygame.draw.rect(screen, (0, 0, 0), (0, SCREEN_HEIGHT + shake_y, SCREEN_WIDTH, -shake_y))
+
+            pygame.display.flip()
+            clock.tick(60)
+
+    if __name__ == "__main__":
+        run_cutscene()
+
+player = Player(player_image, player_pos, player_level, weapon_data)
+# Game loop
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                if game_state == MENU:
+                    if menu_buttons["new_game"].collidepoint(event.pos):
+                        game_state = INTRO
+                    elif menu_buttons["continue"].collidepoint(event.pos):  
+                        start_game()
+                    elif menu_buttons["settings"].collidepoint(event.pos):
+                        game_state = SETTINGS
+                elif game_state == SETTINGS:
+                    if settings_buttons["ok"].collidepoint(event.pos):
+                        game_state = MENU
+                    elif settings_buttons["volume_up"].collidepoint(event.pos):
+                        volume = min(volume + 0.01, 1.0)
+                        set_volume()
+                    elif settings_buttons["volume_down"].collidepoint(event.pos):
+                        volume = max(volume - 0.01, 0.0)
+                        set_volume()
+                elif game_state == GAME:
+                    
+                    mouse_button_held = True
+                if not isinstance(player.weapon, MachineGun):
+                    player.shoot()
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:  # Левая кнопка мыши
+                mouse_button_held = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_F12:
+                debug_mode = not debug_mode
+            elif event.key == pygame.K_UP:
+                volume = min(volume + 0.1, 1.0)
+                set_volume()
+            elif event.key == pygame.K_DOWN:
+                volume = max(volume - 0.1, 0.0)
+                set_volume()
+            elif event.key == pygame.K_SPACE:
+                if player.cp > 0:
+                    player.set_shield_active(True)
+
+            if event.key == pygame.K_1:
+                player.change_weapon(0)
+            elif event.key == pygame.K_2:
+                player.change_weapon(1)
+            elif event.key == pygame.K_3:
+                player.change_weapon(2)
+
+    if game_state == MENU:
+        # Останавливаем основную музыку игры, если она играет
+        pygame.mixer.music.stop()
+
+        # Воспроизводим музыку меню, если она еще не играет
+        if not pygame.mixer.get_busy():
+            menu_music.play(-1)  # -1 означает бесконечное повторение
+
+        # Устанавливаем громкость музыки меню
+        menu_music.set_volume(volume)
+
+        screen.blit(menu_background_image, (0, 0))
+        mouse_pos = pygame.mouse.get_pos()
+        screen.blit(button_1_2 if menu_buttons["new_game"].collidepoint(mouse_pos) else button_1_1, menu_buttons["new_game"])
+        screen.blit(button_2_2 if menu_buttons["continue"].collidepoint(mouse_pos) else button_2_1, menu_buttons["continue"])
+        screen.blit(button_3_2 if menu_buttons["settings"].collidepoint(mouse_pos) else button_3_1, menu_buttons["settings"])
+
+    elif game_state == SETTINGS:
+        screen.blit(menu_background_image, (0, 0))
+        settings_menu_surface = pygame.Surface((400, 300), pygame.SRCALPHA)
+        settings_menu_surface.fill((0, 0, 0, 128))
+        screen.blit(settings_menu_surface, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150))
+        draw_button(screen, "-", font, (255, 255, 255), (255, 255, 255), SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50, 50, 50)
+        draw_text(screen, f"Громкость: {int(volume * 100)}%", font, (255, 255, 255), SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 100)
+        draw_button(screen, "+", font, (255, 255, 255), (255, 255, 255), SCREEN_WIDTH // 2 + 100, SCREEN_HEIGHT // 2 - 50, 50, 50)
+        draw_button(screen, "ОК", font, (0, 0, 0), (255, 255, 255), SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 + 100, 100, 50)
+
+    elif game_state == INTRO:
+        play_intro_video()
+        cap_scens()
+        game_state = GAME
+
+    elif game_state == GAME:
+        # Останавливаем музыку меню при входе в игру
+        menu_music.stop()
+
+        current_time = pygame.time.get_ticks()
+
+        if current_wave is None or (current_wave.is_complete() and len(enemy_list) == 0):
+            if not wave_completed:
+                wave_completed = True
+                # Здесь можно добавить паузу или сообщение о завершении волны
+                pygame.time.wait(2000)  # Пауза в 2 секунды между волнами
+            current_wave = create_next_wave()
+
+        current_wave.update(current_time)
+
+        # Начинаем воспроизведение основной музыки игры с нулевой громкости
+        if not pygame.mixer.music.get_busy():
+            pygame.mixer.music.set_volume(0)
+            pygame.mixer.music.play(-1)
+            fade_start_time = pygame.time.get_ticks()
+            is_fading_in = True
+            initial_volume = 0
+
+        # Логика плавного увеличения громкости
+        if is_fading_in:
+            current_time = pygame.time.get_ticks()
+            elapsed_time = current_time - fade_start_time
+            if elapsed_time < fade_in_time:
+                fade_volume = initial_volume + (target_volume - initial_volume) * (elapsed_time / fade_in_time)
+                pygame.mixer.music.set_volume(fade_volume)
+            else:
+                pygame.mixer.music.set_volume(target_volume)
+                is_fading_in = False
+
+        # Устанавливаем громкость основной музыки игры
+        pygame.mixer.music.set_volume(volume)
+
+        # Добавьте этот код здесь для непрерывной стрельбы из MachineGun
+        if mouse_button_held and isinstance(player.weapon, MachineGun):
+            player.shoot()   
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_a]:
+            player.position[0] -= player_speed
+        if keys[pygame.K_d]:
+            player.position[0] += player_speed
+        if keys[pygame.K_w]:
+            player.position[1] -= player_speed
+        if keys[pygame.K_s]:
+            player.position[1] += player_speed
+
+        player.update()
+        player.update_effects()
+        player.position[0] = max(0, min(player.position[0], SCREEN_WIDTH - player.hitbox.width))
+        player.position[1] = max(0, min(player.position[1], SCREEN_HEIGHT - player.hitbox.height))
+
+        # Динамическая скорость экрана
+        background_pos[1] += background_speed
+        background_pos_2[1] += background_speed 
+
+        if background_pos[1] > background_image.get_height():
+            background_pos[1] = background_pos_2[1] - background_image.get_height()
+        if background_pos_2[1] > background_image.get_height():
+            background_pos_2[1] = background_pos[1] - background_image.get_height()
+
+        current_time = pygame.time.get_ticks()
+        current_wave.update(current_time)
+        if current_wave.is_complete():
+            current_wave = create_next_wave()
+
+        for enemy in enemy_list:
+            if isinstance(enemy, Enemy) and not isinstance(enemy, (ShootingEnemy, SinusoidalEnemy, Boss)):
+                enemy.update(player.position)
+            elif isinstance(enemy, ShootingEnemy):
+                enemy.update(current_time, player.position)
+            elif isinstance(enemy, SinusoidalEnemy):
+                enemy.update(player.position)
+            elif isinstance(enemy, Boss):
+                enemy.update(current_time, player.position)
+
+            if enemy.position[1] > SCREEN_HEIGHT:
+                enemy_list.remove(enemy)
+
+        for bullet in bullet_list.copy():
+            if isinstance(bullet['weapon'], MachineGun):
+                bullet['weapon'].update_bullets(bullet_list, enemy_list)
+            elif isinstance(bullet['weapon'], (Gun, MachineGun)):
+                bullet['pos'][0] += math.cos(math.radians(bullet['angle'])) * bullet['weapon'].bullet_speed
+                bullet['pos'][1] -= math.sin(math.radians(bullet['angle'])) * bullet['weapon'].bullet_speed
+
+                if (bullet['pos'][0] < 0 or bullet['pos'][0] > SCREEN_WIDTH or
+                    bullet['pos'][1] < 0 or bullet['pos'][1] > SCREEN_HEIGHT):
+                    bullet_list.remove(bullet)
+
+        # AttractBall обрабатывается отдельно
+        if player.attract_ball and player.attract_ball.active:
+            player.attract_ball.update()
+            player.attract_ball.attract_enemies(enemy_list)
+
+        for bullet in enemy_bullet_list.copy():
+            bullet['pos'][0] += math.cos(math.radians(bullet['angle'])) * 5
+            bullet['pos'][1] -= math.sin(math.radians(bullet['angle'])) * 5
+
+            # Удаляем пулю, если она вышла за пределы экрана
+            if (bullet['pos'][0] < 0 or bullet['pos'][0] > SCREEN_WIDTH or
+                bullet['pos'][1] < 0 or bullet['pos'][1] > SCREEN_HEIGHT):
+                enemy_bullet_list.remove(bullet)
+
+            # Проверяем столкновение с щитом игрока
+            elif player.check_bullet_shield_collision(bullet['pos']):
+                enemy_bullet_list.remove(bullet)
+                player.cp -= 5  # Уменьшаем CP при попадании в щит
+                if player.cp <= 0:
+                    player.set_shield_active(False)
+                    player.cp = 0
+
+            # Проверяем столкновение с игроком
+            elif player.hitbox.collidepoint(bullet['pos']):
+                player.hp -= 10  # Player takes 10 damage from enemy bullets
+                enemy_bullet_list.remove(bullet)
+                if player.hp <= 0:
+                    handle_player_death()
+                    
+        for bullet in bullet_list.copy():
+            for enemy in enemy_list.copy():
+                if isinstance(player.weapon, Gun) or isinstance(player.weapon, MachineGun):
+                    if enemy.hitbox.collidepoint(bullet['pos'][0], bullet['pos'][1]):
+                        enemy.hp -= player.damage * player.weapon.damage
+                        if enemy.hp <= 0:
+                            boom_sound.play()
+                            explosion = Explosion(enemy.position)
+                            explosion_list.append(explosion)
+                            enemy_list.remove(enemy)
+                            if random.random() < 0.05:
+                                battery = Battery(enemy.position)
+                                battery_list.append(battery)
+                            exp += 2 * player_level
+                        bullet_list.remove(bullet)
+                        break
+
+        if player.attract_ball:
+            player.attract_ball.update()
+            for enemy in enemy_list.copy():
+                if player.attract_ball.active:
+                    dx = player.attract_ball.position[0] - enemy.position[0]
+                    dy = player.attract_ball.position[1] - enemy.position[1]
+                    distance = math.sqrt(dx**2 + dy**2)
+                    if distance < player.attract_ball.radius + enemy.image.get_width() / 2:
+                        enemy.hp -= player.damage * player.weapon.damage
+                        if enemy.hp <= 0:
+                            boom_sound.play()
+                            explosion = Explosion(enemy.position)
+                            explosion_list.append(explosion)
+                            enemy_list.remove(enemy)
+                            if random.random() < 0.05:
+                                battery = Battery(enemy.position)
+                                battery_list.append(battery)
+                            exp += 2 * player_level
+
+        for battery in battery_list.copy():
+            battery.update()
+            if battery.is_off_screen():
+                battery_list.remove(battery)
+            elif player.hitbox.colliderect(battery.hitbox):
+                battery_list.remove(battery)
+                player.cp = min(player.cp + 20, player_data.loc[player_data['Level'] == player_level, 'CP'].values[0])
+                battery_pickup_sound.set_volume(volume)
+                battery_pickup_sound.play()
+
+        for enemy in enemy_list.copy():
+            if player.hitbox.colliderect(enemy.hitbox):
+                player.hp -= enemy.damage
+                if player.hp <= 0:
+                    handle_player_death()
+
+                boom_sound.play()
+                explosion = Explosion(enemy.position)
+                explosion_list.append(explosion)
+                if random.random() < 0.05:
+                    # Calculate velocity based on enemy's speed and angle
+                    velocity = [enemy.speed * math.cos(math.radians(enemy.angle)),
+                                enemy.speed * math.sin(math.radians(enemy.angle))]
+                    battery = Battery(enemy.position, velocity)  # Pass both position and velocity
+                    battery_list.append(battery)
+                enemy_list.remove(enemy)
+
+        for enemy in enemy_list.copy():
+            if player.shield_active and enemy.check_shield_collision((player.position[0] + player.image.get_width() // 2, player.position[1] + player.image.get_height() // 2), player.shield_radius):
+                player.cp -= enemy.damage
+                if player.cp <= 0:
+                    player.set_shield_active(False)
+                    player.cp = 0
+                boom_sound.play()
+                explosion = Explosion(enemy.position)
+                explosion_list.append(explosion)
+                enemy_list.remove(enemy)
+
+        for explosion in explosion_list:
+            explosion.update()
+
+        for battery in battery_list:
+            battery.update()
+
+        screen.blit(background_image, (int(background_pos[0]), int(background_pos[1])))
+        screen.blit(background_image, (int(background_pos_2[0]), int(background_pos_2[1])))
+        player.draw(screen)
+        for enemy in enemy_list:
+            enemy.draw(screen)
+        for bullet in bullet_list:
+            if isinstance(player.weapon, Gun) or isinstance(player.weapon, MachineGun):
+                pygame.draw.circle(screen, bullet['weapon'].bullet_color_glow, (int(bullet['pos'][0]), int(bullet['pos'][1])), bullet['weapon'].bullet_radius + 2)
+                pygame.draw.circle(screen, bullet['weapon'].bullet_color, (int(bullet['pos'][0]), int(bullet['pos'][1])), bullet['weapon'].bullet_radius)
+        for bullet in enemy_bullet_list:
+            pygame.draw.circle(screen, (255, 0, 0), (int(bullet['pos'][0]), int(bullet['pos'][1])), 3)
+        for explosion in explosion_list:
+            explosion.draw(screen)
+        for battery in battery_list:
+            battery.draw(screen)
+        if player.attract_ball and player.attract_ball.active:
+            player.attract_ball.update()
+            player.attract_ball.attract_enemies(enemy_list)  # Добавьте эту строку
+            for enemy in enemy_list.copy():
+                dx = player.attract_ball.position[0] - enemy.position[0]
+                dy = player.attract_ball.position[1] - enemy.position[1]
+                distance = math.sqrt(dx**2 + dy**2)
+                if distance < player.attract_ball.radius + enemy.image.get_width() / 2:
+                    enemy.hp -= player.attract_ball.damage
+                    if enemy.hp <= 0:
+                        boom_sound.play()
+                        explosion = Explosion(enemy.position)
+                        explosion_list.append(explosion)
+                        enemy_list.remove(enemy)
+                        if random.random() < 0.05:
+                            battery = Battery(enemy.position)
+                            battery_list.append(battery)
+                        exp += 2 * player_level
+
+        # Draw HUD
+        bar_width = 300
+        bar_height = 15
+        bar_x = SCREEN_WIDTH - bar_width - 1530  # Move bars to the right
+        bar_y_start = 30
+        bar_spacing = 20
+
+        # HP bar
+        hp_bar_y = bar_y_start
+        pygame.draw.rect(screen, (255, 0, 0), (bar_x, hp_bar_y, bar_width, bar_height))
+        hp_width = bar_width * (player.hp / player_data.loc[player_data['Level'] == player_level, 'HP'].values[0])
+        pygame.draw.rect(screen, (0, 255, 0), (bar_x, hp_bar_y, hp_width, bar_height))
+        hp_text = f"{int(player.hp)}/{int(player_data.loc[player_data['Level'] == player_level, 'HP'].values[0])}"
+        text_surface, _ = GAME_FONT.render(hp_text, (192, 192, 192))  # Silver color
+        text_rect = text_surface.get_rect(center=(bar_x + bar_width // 2, hp_bar_y + bar_height // 2))
+        screen.blit(text_surface, text_rect)
+
+        # CP bar
+        cp_bar_y = hp_bar_y + bar_spacing
+        pygame.draw.rect(screen, (100, 100, 100), (bar_x, cp_bar_y, bar_width, bar_height))
+        cp_width = bar_width * (player.cp / player_data.loc[player_data['Level'] == player_level, 'CP'].values[0])
+        pygame.draw.rect(screen, (0, 0, 255), (bar_x, cp_bar_y, cp_width, bar_height))
+        cp_text = f"{int(player.cp)}/{int(player_data.loc[player_data['Level'] == player_level, 'CP'].values[0])}"
+        text_surface, _ = GAME_FONT.render(cp_text, (192, 192, 192))  # Silver color
+        text_rect = text_surface.get_rect(center=(bar_x + bar_width // 2, cp_bar_y + bar_height // 2))
+        screen.blit(text_surface, text_rect)
+
+        # EXP bar
+        exp_bar_y = cp_bar_y + bar_spacing
+        pygame.draw.rect(screen, (100, 100, 100), (bar_x, exp_bar_y, bar_width, bar_height))
+        exp_width = bar_width * (exp / exp_max)
+        pygame.draw.rect(screen, (255, 255, 0), (bar_x, exp_bar_y, exp_width, bar_height))
+        exp_text = f"{int(exp)}/{int(exp_max)}"
+        text_surface, _ = GAME_FONT.render(exp_text, (192, 192, 192))  # Silver color
+        text_rect = text_surface.get_rect(center=(bar_x + bar_width // 2, exp_bar_y + bar_height // 2))
+        screen.blit(text_surface, text_rect)
+        
+        # Player level
+        level_text = f"{player_level}"
+        level_surface = level_font.render(level_text, True, (255, 255, 255))
+        level_rect = level_surface.get_rect()
+        level_rect.left = 6
+        level_rect.centery = hp_bar_y + bar_height // 0.6  # Центрируем по вертикали относительно HP бара
+        screen.blit(level_surface, level_rect)
+
+        # Wave number
+        wave_text = f"Волна: {wave_number}"
+        wave_surface = font.render(wave_text, True, (255, 255, 255))
+        wave_rect = wave_surface.get_rect()
+        wave_rect.left = 120
+        wave_rect.top = level_rect.bottom + 120
+        screen.blit(wave_surface, wave_rect)
+
+        # В игровом цикле, после отрисовки других элементов HUD
+        draw_weapon_icons(screen, player)
+
+        if debug_mode:
+            draw_text(screen, f"FPS: {int(clock.get_fps())}", font, (255, 255, 255), 10, SCREEN_HEIGHT - 30)
+            draw_text(screen, f"Enemies: {len(enemy_list)}", font, (255, 255, 255), 10, SCREEN_HEIGHT - 60)
+            draw_text(screen, f"Bullets: {len(bullet_list)}", font, (255, 255, 255), 10, SCREEN_HEIGHT - 90)
+
+        # Отображение количества патронов
+        if isinstance(player.weapon, Gun):
+            ammo_text = "Ammo: Infinite"
+        elif isinstance(player.weapon, MachineGun):
+            ammo_text = f"Ammo: {player.weapon.ammo}/{player.weapon.max_ammo}"
+        elif isinstance(player.weapon, AttractBall):
+            ammo_text = f"Ammo: {player.weapon.ammo}/{player.weapon.max_ammo}"
+        else:
+            ammo_text = "Ammo: N/A"
+
+        draw_text(screen, ammo_text, font, (255, 255, 255), 120, 180)
+
+
+    # Отрисовка пользовательского курсора
+    cursor_pos = pygame.mouse.get_pos()
+    screen.blit(cursor_image, cursor_pos)
+
+    pygame.display.flip()
+    clock.tick(100)
+
+    # Level up logic
+    if exp >= exp_max:
+        player_level += 1
+        exp = 0
+        exp_max *= 1.5
+        player.level = player_level
+        player.hp = player_data.loc[player_data['Level'] == player_level, 'HP'].values[0]
+        player.cp = player_data.loc[player_data['Level'] == player_level, 'CP'].values[0]
+        player.damage = player_data.loc[player_data['Level'] == player_level, 'Damage'].values[0]
+
+    if pygame.key.get_pressed()[pygame.K_ESCAPE]:
+        pygame.quit()
+        sys.exit()
+
+pygame.quit()
+sys.exit()
